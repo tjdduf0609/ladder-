@@ -141,6 +141,8 @@
   'use strict';
   var TEAMS = ['원무', '진료', '방재', '보안'];
   var COLORS = { '원무':'#1ec2b5', '진료':'#8fb8ff', '방재':'#e0665a', '보안':'#e0b567' };
+  // 팀별 기본 가중치 (합계 100) — 공개 규칙: 방재 16 · 나머지 각 28
+  var WEIGHTS = { '원무':28, '진료':28, '방재':16, '보안':28 };
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var nameEl = document.getElementById('name');
@@ -168,11 +170,23 @@
 
   // ---------- 슬롯 구성: 희망 팀은 한 칸 더 ----------
   function buildSlots(){
-    var slots = TEAMS.map(function(t){ return { team:t, bonus:false }; });
+    var slots = TEAMS.map(function(t){ return { team:t, bonus:false, w:WEIGHTS[t] }; });
     if (!pref) return slots;
     var i = TEAMS.indexOf(pref);
-    slots.splice((i + 2) % TEAMS.length, 0, { team:pref, bonus:true });
+    slots.splice((i + 2) % TEAMS.length, 0, { team:pref, bonus:true, w:WEIGHTS[pref] });
     return slots;
+  }
+  function totalWeight(slots){
+    var t = 0; slots.forEach(function(s){ t += s.w; }); return t;
+  }
+  // 칸 크기는 가중치에 비례
+  function layout(slots){
+    var total = totalWeight(slots), acc = 0, out = [];
+    slots.forEach(function(s){
+      var width = s.w / total * Math.PI * 2;
+      out.push({ start:acc, width:width }); acc += width;
+    });
+    return out;
   }
 
   // ---------- 난수: 편향 없는 정수 추첨 ----------
@@ -189,7 +203,7 @@
   function draw(){
     var slots = buildSlots();
     var n = slots.length;
-    var seg = Math.PI * 2 / n;
+    var lay = layout(slots);
     var W = canvas.width, cx = W / 2, cy = W / 2, R = W / 2 - 14;
     ctx.clearRect(0, 0, W, W);
 
@@ -198,15 +212,15 @@
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(30,194,181,.55)'; ctx.stroke();
 
     for (var k = 0; k < n; k++) {
-      var a0 = rot + k * seg - Math.PI / 2;
-      var a1 = a0 + seg;
+      var a0 = rot + lay[k].start - Math.PI / 2;
+      var a1 = a0 + lay[k].width;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
       ctx.fillStyle = COLORS[slots[k].team]; ctx.fill();
       ctx.lineWidth = 4; ctx.strokeStyle = '#081412'; ctx.stroke();
 
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(a0 + seg / 2);
+      ctx.rotate(a0 + lay[k].width / 2);
       ctx.fillStyle = '#06110f';
       ctx.font = '40px NeoDunggeunmoCode, monospace';
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
@@ -241,10 +255,19 @@
     });
     syncUI();
   }
+  function fmtPct(x){ return String(Math.round(x * 10) / 10); }
+  function oddsText(){
+    var slots = buildSlots(), total = totalWeight(slots), pct = {};
+    TEAMS.forEach(function(t){ pct[t] = 0; });
+    slots.forEach(function(s){ pct[s.team] += s.w / total * 100; });
+    return TEAMS.map(function(t){ return t + ' ' + fmtPct(pct[t]) + '%'; }).join(' \u00b7 ');
+  }
   function updateOdds(){
     oddsEl.className = 'hint';
-    if (pref) oddsEl.textContent = '희망 팀(' + pref + ')은 룰렛에 한 칸(\u2605) 더 들어갑니다. 확률: ' + pref + ' 40% · 나머지 각 20%';
-    else oddsEl.textContent = '희망 팀을 고르면 그 팀이 룰렛에 한 칸 더 들어갑니다. 지금은 4개 팀 각 25%입니다.';
+    var lead = pref
+      ? '희망 팀(' + pref + ')은 룰렛에 한 칸(\u2605) 더 들어갑니다. '
+      : '희망 팀을 고르면 그 팀이 룰렛에 한 칸 더 들어갑니다. ';
+    oddsEl.textContent = lead + '확률: ' + oddsText();
   }
   function syncUI(){
     var idle = state === 'idle';
@@ -269,12 +292,12 @@
       return;
     }
     var slots = buildSlots();
-    var n = slots.length;
-    var seg = Math.PI * 2 / n;
-    var k = secureInt(n);
-    var jitter = (Math.random() - 0.5) * seg * 0.7;
+    var lay = layout(slots);
+    var r = secureInt(totalWeight(slots)), k = 0, acc = 0;
+    for (; k < slots.length - 1; k++) { acc += slots[k].w; if (r < acc) break; }
+    var jitter = (Math.random() - 0.5) * lay[k].width * 0.7;
     var TWO = Math.PI * 2;
-    var target = -((k + 0.5) * seg + jitter);
+    var target = -(lay[k].start + lay[k].width / 2 + jitter);
     var start = rot;
     var base = ((start % TWO) + TWO) % TWO;
     var delta = ((((target - base) % TWO) + TWO) % TWO);
@@ -302,8 +325,8 @@
     state = 'done';
     resName.textContent = name;
     resTeam.textContent = slot.team + '팀';
-    if (chosenPref && chosenPref === slot.team) resNote.textContent = '희망 팀으로 배정되었습니다.';
-    else if (chosenPref) resNote.textContent = '희망 팀은 ' + chosenPref + '이었습니다. 새 팀에서도 잘 부탁드립니다.';
+    if (chosenPref && chosenPref === slot.team) resNote.textContent = '배정이 완료되었습니다.';
+    else if (chosenPref) resNote.textContent = '희망 팀은 ' + chosenPref + '배정이 완료되었습니다.';
     else resNote.textContent = '배정이 완료되었습니다.';
     syncUI(); renderLog();
     try { resultEl.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) {}
