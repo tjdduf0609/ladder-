@@ -141,8 +141,8 @@
   'use strict';
   var TEAMS = ['원무', '진료', '방재', '보안'];
   var COLORS = { '원무':'#1ec2b5', '진료':'#8fb8ff', '방재':'#e0665a', '보안':'#e0b567' };
-  // 팀별 기본 가중치 (합계 100) — 공개 규칙: 방재 16 · 나머지 각 28
-  var WEIGHTS = { '원무':28, '진료':28, '방재':16, '보안':28 };
+  // 팀별 기본 가중치 (합계 100) — 모든 팀 동일
+  var WEIGHTS = { '원무':25, '진료':25, '방재':25, '보안':25 };
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var nameEl = document.getElementById('name');
@@ -325,7 +325,7 @@
     state = 'done';
     resName.textContent = name;
     resTeam.textContent = slot.team + '팀';
-     resNote.textContent = '배정이 완료되었습니다.';
+    resNote.textContent = '배정이 완료되었습니다.';
     syncUI(); renderLog();
     try { resultEl.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) {}
   }
