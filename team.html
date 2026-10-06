@@ -325,9 +325,7 @@
     state = 'done';
     resName.textContent = name;
     resTeam.textContent = slot.team + '팀';
-    if (chosenPref && chosenPref === slot.team) resNote.textContent = '배정이 완료되었습니다.';
-    else if (chosenPref) resNote.textContent = chosenPref + '배정이 완료되었습니다.';
-    else resNote.textContent = '배정이 완료되었습니다.';
+    resNote.textContent = '배정이 완료되었습니다.';
     syncUI(); renderLog();
     try { resultEl.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) {}
   }
